@@ -1,0 +1,332 @@
+ 
+
+-- =============================================
+-- Author:		Дмитрий Бойко
+-- Create date: 27.01.2018
+-- Description:	Возвращает детальную информацию о средней загрузке и плече(км) рейса по всем самосвалам за период
+-- =============================================
+ALTER PROCEDURE [dbo].[AverageWeightLoadAllHauls] 
+
+	-- Add the parameters for the stored procedure here
+	@Date1 datetime, 
+	@Date2 datetime,
+	@CargoType int, -- тип груза
+	@ZoneIn int,  -- зона погрузки
+	@ZoneOut int, -- зона разгрузки
+	@IsHaulDistance bit,
+	@HaulDistanceMin float,
+	@HaulDistanceMax float
+
+AS	
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+	/*   Для тестировани 
+ 
+	Declare @TimeStart datetime
+	Declare @TimeEnd datetime
+	Declare @CargoType int
+	Declare @ZoneIn int
+	Declare @ZoneOut int
+
+	Set @TimeStart = Convert(datetime, '26.01.2018 08:00:00', 104)
+	Set @TimeEnd = Convert(datetime, '26.01.2018 20:00:00', 104)
+
+	Set @CargoType = 1
+	Set @ZoneIn = 25
+	Set @ZoneOut = 2
+
+	declare @Date1 datetime
+	declare @Date2 datetime
+
+	set @Date1 = @TimeStart
+	set @Date2 = @TimeEnd
+
+	*/
+ 
+ DECLARE @wdh AS TABLE 
+(ID int, Machine int, TimeStart datetime, TimeEnd datetime, Loader varchar(100), CargoType int, Volume float, Weight float, TimeLoad float,
+ZoneIn nvarchar(200), ZoneInID int, ZoneOut nvarchar(200), ZoneOutID int, HaulDistance float)
+
+IF @CargoType = 0 
+	BEGIN
+	   IF @ZoneIn = -1 -- Если зона погрузки ИСКЛЮЧЕНА из запроса
+	     BEGIN
+			INSERT INTO @wdh  SELECT ID, Machine,TimeStart,TimeEnd,Loader,CargoType,Volume,Weight / 1000.0 As Weight
+			,DATEDIFF(second, convert(datetime, '01.01.1900', 104), WDATA_HAUL.TimeLoad) As TimeLoad,
+			(SELECT DA.Name FROM DATA_AREA DA WHERE DA.ID= S_Area) AS ZoneIn,
+			S_Area AS ZoneInID, (SELECT DA.Name FROM DATA_AREA DA WHERE DA.ID= E_Area) As ZoneOut,
+			E_Area AS ZoneOutID, (MileageEnd - MileageStart) / 1000.0 AS  HaulDistance
+			From WDATA_HAUL WHERE  	(TimeStart < @Date2 AND  TimeEnd > @Date1) AND (E_Area = @ZoneOut)
+        END
+      ELSE
+	    BEGIN
+			INSERT INTO @wdh  SELECT ID, Machine,TimeStart,TimeEnd,Loader,CargoType,Volume,Weight / 1000.0 As Weight
+			,DATEDIFF(second, convert(datetime, '01.01.1900', 104), WDATA_HAUL.TimeLoad) As TimeLoad,
+			(SELECT DA.Name FROM DATA_AREA DA WHERE DA.ID= S_Area) AS ZoneIn,
+			S_Area AS ZoneInID, (SELECT DA.Name FROM DATA_AREA DA WHERE DA.ID= E_Area) As ZoneOut,
+			E_Area AS ZoneOutID, (MileageEnd - MileageStart) / 1000.0 AS  HaulDistance
+			From WDATA_HAUL WHERE  	(TimeStart < @Date2 AND  TimeEnd > @Date1) AND (S_Area = @ZoneIn AND E_Area = @ZoneOut)
+        END
+	END
+ELSE
+	BEGIN
+	       IF @ZoneIn = -1 -- Если зона погрузки ИСКЛЮЧЕНА из запроса
+	         BEGIN
+				INSERT INTO @wdh  SELECT ID, Machine,TimeStart,TimeEnd,Loader,CargoType,Volume,Weight / 1000.0 As Weight
+				,DATEDIFF(second, convert(datetime, '01.01.1900', 104), WDATA_HAUL.TimeLoad) As TimeLoad,
+				(SELECT DA.Name FROM DATA_AREA DA WHERE DA.ID= S_Area) AS ZoneIn,
+				S_Area AS ZoneInID, (SELECT DA.Name FROM DATA_AREA DA WHERE DA.ID= E_Area) As ZoneOut,
+				E_Area AS ZoneOutID, (MileageEnd - MileageStart) / 1000.0 AS  HaulDistance
+				From WDATA_HAUL WHERE (TimeStart < @Date2 AND TimeEnd > @Date1) AND CargoType = @CargoType 
+				AND (E_Area = @ZoneOut) 
+            END
+		  ELSE
+		      BEGIN
+				INSERT INTO @wdh  SELECT ID, Machine,TimeStart,TimeEnd,Loader,CargoType,Volume,Weight / 1000.0 As Weight
+				,DATEDIFF(second, convert(datetime, '01.01.1900', 104), WDATA_HAUL.TimeLoad) As TimeLoad,
+				(SELECT DA.Name FROM DATA_AREA DA WHERE DA.ID= S_Area) AS ZoneIn,
+				S_Area AS ZoneInID, (SELECT DA.Name FROM DATA_AREA DA WHERE DA.ID= E_Area) As ZoneOut,
+				E_Area AS ZoneOutID, (MileageEnd - MileageStart) / 1000.0 AS  HaulDistance
+				From WDATA_HAUL WHERE (TimeStart < @Date2 AND TimeEnd > @Date1) AND CargoType = @CargoType 
+				AND (S_Area = @ZoneIn AND E_Area = @ZoneOut) 
+            END
+	END
+	
+-- Находим данные по СИЗА по номеру события (29) в таблице DATA_SENSOR
+Select ds.AtTime, wdh.ID As IDHaul, wdh.Weight,wdh.TimeStart,wdh.TimeEnd,Case When ds.ValueInt Is Null Then ds.ValueFloat Else ds.ValueInt / 10.0 End As WeightSIZA 
+Into #siza001 From @wdh wdh Left Outer Join DATA_SENSOR ds On wdh.Machine = ds.Machine
+	And ds.AtTime Between wdh.TimeStart And wdh.TimeEnd
+	And ds.Sensor = 29
+
+Select siza.*
+Into #siza01
+From #siza001 siza
+Inner Join
+(
+	Select Max(AtTime) As AtTime
+		,IDHaul 
+	From #siza001
+	Group By IDHaul 
+) s
+	On siza.IDHaul = s.IDHaul
+	And siza.AtTime = s.AtTime
+	
+-- Находим вес, рассчитанный СИЗА
+Select wdh.ID As IDHaul
+	,MAX(da.AtTime) As AtTime
+Into #siza002
+From DATA_ACTION da
+Inner Join DATA_MACHINE dm
+	On da.Machine = dm.ID
+Inner Join @wdh wdh
+	On da.Machine = wdh.Machine
+	And da.AtTime Between wdh.TimeStart And wdh.TimeEnd --DATEADD(second, - wdh.TimeLoad, wdh.TimeStart) And wdh.TimeEnd
+Where da.AtTime Between @Date1 And @Date2
+	And da.ValueString Like ('%СИЗА test:%')
+Group By wdh.ID
+
+Select dm.Name As MachineName
+	,da.*
+	,wdh.ID As IDHaul
+	,wdh.Weight
+	,wdh.TimeStart
+	,wdh.TimeEnd
+	,CONVERT(real,SUBSTRING(SUBSTRING(da.ValueString, CHARINDEX('=', da.ValueString, 1) + 1, 10), 1, 
+		CHARINDEX(' ', SUBSTRING(da.ValueString, CHARINDEX('=', da.ValueString, 1) + 1, 10), 1))) As WeightSIZA
+	--,CONVERT(real, SUBSTRING(da.ValueString, CHARINDEX('W', da.ValueString, 1) + 2, 10)) / 10.0 As WeightSIZA
+Into #siza021
+From DATA_ACTION da
+Inner Join DATA_MACHINE dm
+	On da.Machine = dm.ID
+Inner Join @wdh wdh
+	On da.Machine = wdh.Machine
+	And da.AtTime Between wdh.TimeStart And wdh.TimeEnd --DATEADD(second, - wdh.TimeLoad, wdh.TimeStart) And wdh.TimeEnd
+Inner Join #siza002
+	On wdh.ID = #siza002.IDHaul
+	And da.AtTime = #siza002.AtTime
+Where da.AtTime Between @Date1 And @Date2
+	And da.ValueString Like ('%СИЗА test:%')
+Order By da.Machine, da.AtTime
+
+
+-- Находим последние ковши, определенные СИЗА, когда машина стояла
+Select dm.Name As MachineName
+	,da.*
+	,wdh.ID As IDHaul
+	,wdh.Weight
+	,wdh.TimeStart
+	,wdh.TimeEnd
+	,CONVERT(real, Replace(SUBSTRING(da.ValueString, CHARINDEX('=', da.ValueString, 1) + 1, 
+		CHARINDEX(' ', SUBSTRING(da.ValueString, CHARINDEX('=', da.ValueString, 1) + 3, 10), 1)), ',', '.')) As WeightShovel
+Into #siza02
+From DATA_ACTION da
+Inner Join
+(
+	Select da.Machine
+		,wdh.ID
+		,MAX(da.AtTime) As AtTime
+	From DATA_ACTION da
+	Inner Join @wdh wdh
+		On da.Machine = wdh.Machine
+		And da.AtTime Between wdh.TimeStart And wdh.TimeEnd
+	Where da.AtTime Between @Date1 And @Date2
+		And da.ValueString Like ('%payloader%')
+		And (da.ValueString Like ('%S=1%') Or da.ValueString Like ('%S=2%'))
+	Group By da.Machine
+		,wdh.ID
+) daMax
+	On da.Machine = daMax.Machine
+	And da.AtTime = daMax.AtTime
+Inner Join DATA_MACHINE dm
+	On da.Machine = dm.ID
+Inner Join @wdh wdh
+	On daMax.ID = wdh.ID
+Where da.AtTime Between @Date1 And @Date2
+	And da.ValueString Like ('%payloader%')
+	And (da.ValueString Like ('%S=1%') Or da.ValueString Like ('%S=2%'))
+Order By da.AtTime
+
+-- Находим вес по VIMS в момент начала движения после погрукзки (только для CAT)
+Select dm.Name As MachineName
+	,da.*
+	,wdh.ID As IDHaul
+	,wdh.Weight
+	,wdh.TimeStart
+	,wdh.TimeEnd
+	,CONVERT(real, Replace(SUBSTRING(da.ValueString, CHARINDEX('=', da.ValueString, 1) + 1, 10), ',', '.')) As WeightVIMS
+Into #siza05
+From DATA_ACTION da
+Inner Join
+(
+	Select da.Machine
+		,wdh.IDHaul As ID
+		,MAX(da.AtTime) As AtTime
+	From DATA_ACTION da
+	Inner Join #siza02 wdh
+		On da.Machine = wdh.Machine
+		And da.AtTime Between wdh.TimeStart And wdh.AtTime
+	Where da.AtTime Between @Date1 And @Date2
+		And da.ValueString Like ('%Caterpillar%')
+	Group By da.Machine
+		,wdh.IDHaul
+) daMax
+	On da.Machine = daMax.Machine
+	And da.AtTime = daMax.AtTime
+Inner Join DATA_MACHINE dm
+	On da.Machine = dm.ID
+Inner Join @wdh wdh
+	On daMax.ID = wdh.ID
+Where da.AtTime Between @Date1 And @Date2
+	And da.ValueString Like ('%Caterpillar%')
+Order By da.AtTime
+
+-- Находим вес последнего ковша, полученный машинистом экскаватора
+Select dm.Name As MachineName
+	,drm.*
+	,wdh.ID As IDHaul
+	,wdh.Weight
+	,wdh.TimeStart
+	,wdh.TimeEnd
+	,CONVERT(real, Replace(SUBSTRING(drm.Message, CHARINDEX(': ', drm.Message, 1) + 2, 
+		CHARINDEX('т', SUBSTRING(drm.Message, CHARINDEX(': ', drm.Message, 1) + 3, 10), 1)), ',', '.')) As WeightMessage
+Into #siza03
+From DATA_RM_MESSAGE drm
+Inner Join
+(
+	Select drm.Machine
+		,wdh.ID
+		,MAX(drm.TimeRecieve) As TimeRecieve
+	From DATA_RM_MESSAGE drm
+	Inner Join @wdh wdh
+		On drm.Machine = wdh.Loader
+		And drm.TimeRecieve Between wdh.TimeStart And wdh.TimeEnd
+	Inner Join DATA_MACHINE dm
+		On wdh.Machine = dm.ID		
+	Where drm.TimeRecieve Between @Date1 And @Date2
+		And drm.Message Like ('%№%')
+		And drm.Message Like ('%т%')
+		And drm.messageType = 1
+		And drm.Message Like ('%№' + LTRIM(RTRIM(dm.Name)) +'%')
+	Group By drm.Machine
+		,wdh.ID
+) daMax
+	On drm.Machine = daMax.Machine
+	And drm.TimeRecieve = daMax.TimeRecieve
+Inner Join @wdh wdh
+	On daMax.ID = wdh.ID
+Inner Join DATA_MACHINE dm
+	On wdh.Machine = dm.ID
+Where drm.TimeRecieve Between @Date1 And @Date2
+	And drm.Message Like ('%№%')
+	And drm.Message Like ('%т%')
+	And drm.messageType = 1
+Order By drm.TimeRecieve
+
+
+	 
+			Select Distinct wdh.Machine as MachineID, LTrim(RTrim(im.Name)) + '  № ' + Ltrim(Rtrim(dm.Name)) As Machine
+			,LTrim(RTrim(IsNull(iml.Name, ''))) + 
+				Case When Left(Ltrim(dml.Name), 1) In ('0','1','2','3','4','5','6','7','8','9') 
+				Then '  № ' Else '   ' End + Ltrim(Rtrim(isNull(dml.Name, 'Неопределен'))) As Loader
+			,isNull(dml.Name, 'Неопределен') As LoaderShort
+			,Ltrim(Rtrim(ISNULL(ic.Name, 'не определен'))) As CargoName
+			,wdh.TimeStart
+			,wdh.TimeEnd
+			, ROUND(ISNULL(wdh.Weight, 0.00),2)  as Weight
+			,Siza1.AtTime As siza1Time
+			,ROUND(Siza1.WeightSIZA,2) as WeightSIZA
+			,Siza2.AtTime As siza2Time
+			,Siza2.WeightShovel
+			,RTRIM(wdh.ZoneIn) AS ZoneIn
+			,wdh.ZoneInID
+			,RTRIM(wdh.ZoneOut) AS ZoneOut
+			,wdh.ZoneOutID
+			,wdh.HaulDistance
+			--,Siza3.TimeRecieve
+			--,Siza3.WeightMessage
+			--,Siza21.AtTime As siza21Time
+			--,Siza21.WeightSIZA As WeightSIZAtest
+			--,Siza5.AtTime As siza5Time
+			--,Siza5.WeightVIMS
+		From @wdh wdh
+		Inner Join DATA_MACHINE dm
+			On wdh.Machine = dm.ID
+		Inner Join INFO_MODEL im
+			On dm.Model = im.ID
+		Left Outer Join DATA_MACHINE dml
+			On wdh.Loader = dml.ID
+		Left Outer Join INFO_MODEL iml
+			On dml.Model = iml.ID
+		Left Outer Join INFO_CARGO ic
+			On wdh.CargoType = ic.ID
+		Left Outer Join #siza01 Siza1
+			On wdh.ID = Siza1.IDHaul
+		Left Outer Join #siza02 Siza2
+			On wdh.ID = Siza2.IDHaul
+		Left Outer Join #siza03 Siza3
+			On wdh.ID = Siza3.IDHaul
+		Left Outer Join #siza021 Siza21
+			On wdh.ID = Siza21.IDHaul
+		Left Outer Join dbo.GetMachineConfig(@Date1, 0) gmc
+			On wdh.Machine = gmc.Machine
+		Left Outer Join #siza05 Siza5
+			On wdh.ID = Siza5.IDHaul
+	   WHERE
+			  (@IsHaulDistance = 1 AND  wdh.HaulDistance BETWEEN @HaulDistanceMin AND  @HaulDistanceMax)
+			  OR  
+			  (@IsHaulDistance = 0 AND  wdh.HaulDistance > 0)
+			 
+ 
+Drop Table #siza01
+Drop Table #siza001
+Drop Table #siza002
+Drop Table #siza021
+
+Drop Table #siza02
+Drop Table #siza03
+Drop Table #siza05
+
+END
