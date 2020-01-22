@@ -1,0 +1,1333 @@
+﻿@using GJob.Models.Views
+@using GJob.Models.Enums
+@using GJob.Controllers
+@using Newtonsoft.Json
+
+@model SendEmailExtPageModel
+
+@{
+    ViewBag.Title = "Письмо";
+    Layout = "~/Views/Shared/_Layout2.cshtml";
+}
+
+@helper DisplaySupportCallInfo()
+{
+    if (Model.Email.SCEmail != null && Model.Email.SCEmail.SupportView != null)
+    {
+        <span>по заявке <a data-toggle="tooltip" data-placement="bottom" title="Нажмите для просмотра заявки" class="text-primary" href='@Url.Content(string.Format("~/SupportCalls/Details/{0}", Model.Email.SCEmail.SupportCallID))'>@Model.Email.SCEmail.SupportView.DeviceFullName @Model.Email.SCEmail.SupportView.FullFaultDescription</a></span>
+    }
+}
+
+@functions {
+
+    string IsCheckedEMail(string toEmail)
+    {
+        foreach (var item in Model.Email.ToEmailsAsList)
+        {
+            if (item == toEmail)
+            {
+                return " checked ";
+            }
+        }
+
+        return string.Empty;
+    }
+
+    string IsCheckedSMSPersonal(int personalID)
+    {
+        foreach (var item in Model.Email.SMSPersonalIDsAsList)
+        {
+            if (item == personalID.ToString())
+            {
+                return " checked ";
+            }
+        }
+
+        return string.Empty;
+    }
+
+    string GetSMSText()
+    {
+        if (string.IsNullOrEmpty(Model.Email.SMSText))
+        {
+            return string.Format("Вызов представителей {0} {1}", Model.Email.SCEmail.SupportView.DeviceFullName, Model.Email.SCEmail.SupportView.FullFaultDescription);
+        }
+        else
+        {
+            return Model.Email.SMSText;
+        }
+    }
+
+    bool IsConfirmPersonal(int personalID, int departmentID)
+    {
+        var isExisting = Model.Email.EmailConfirmations.FirstOrDefault(x => x.PersonalID == personalID && x.DepartmentID == departmentID);
+        if (isExisting != null)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    string GetConfirmPersonalState(bool v)
+    {
+        return v ? "checked" : string.Empty;
+    }
+
+    string GetConfirmPersonalTime(int personalID, int departmentID)
+    {
+        var isExisting = Model.Email.EmailConfirmations.FirstOrDefault(x => x.PersonalID == personalID && x.DepartmentID == departmentID);
+        if (isExisting != null)
+        {
+            return isExisting.AtTime.ToString("dd.MM.yy HH:mm");
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+
+    string GetConfirmPersonalPosition(int personalID)
+    {
+        var isExisting = Model.Email.EmailConfirmations.FirstOrDefault(x => x.PersonalID == personalID);
+        if (isExisting != null)
+        {
+            return isExisting.Position;
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+}
+
+<h6 class="mt-1 text-center">Письмо <bold>№@Model.Email.Number.ToString() от @Model.Email.Created.ToString("dd.MM.yy")</bold>  @DisplaySupportCallInfo() - <span>@Model.Email.LastEmailState.EmailStateTypeName</span></h6>
+
+<div class="container-fluid pl-0 pr-0 border-top pt-2" style="">
+    <div class="row" style=" background-color:transparent;">
+        <div class="col-12">
+            <div class="row">
+                <div class="col-8 border-right">
+                    <div class="form-group row mb-0">
+                        <label for="inputTemplates" class="col-sm-2 col-form-label">Отправитель</label>
+                        <div class="col-sm-10">
+                            @if (Model.ConfirmationConfig != null && Model.ConfirmationConfig.PersonalPerDepartNumbers > 0)
+                            {
+                                if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                {
+                                    <select class="form-control form-control-sm mb-0" id="selectSender" style="max-width:100%!important;">
+                                        @foreach (var item in ViewBag.Senders as List<DeviceWorkGroupEmailView>)
+                                        {
+                                            if (item.IsValidEmail)
+                                            {
+                                                <option class="text-success" value="@item.ID" data-email="@item.Email" title="@item.Email - @item.EmailFrom">@item.Email - @item.EmailFrom</option>
+                                            }
+                                            else
+                                            {
+                                                <option class="text-danger" value="@item.ID" data-email="" disabled="disabled" title="@item.Email - @item.EmailFrom">@item.Email - @item.EmailFrom</option>
+                                            }
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    <p class="mt-2 text-success">@Model.Email.FromEmail</p>
+                                }
+                            }
+                            else
+                            {
+                                if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                {
+                                    <select class="form-control form-control-sm mb-0" id="selectSender" style="max-width:100%!important;">
+                                        @foreach (var item in ViewBag.Senders as List<DeviceWorkGroupEmailView>)
+                                        {
+                                            if (item.IsValidEmail)
+                                            {
+                                                <option class="text-success" value="@item.ID" data-email="@item.Email" title="@item.Email - @item.EmailFrom">@item.Email - @item.EmailFrom</option>
+                                            }
+                                            else
+                                            {
+                                                <option class="text-danger" value="@item.ID" data-email="" disabled="disabled" title="@item.Email - @item.EmailFrom">@item.Email - @item.EmailFrom</option>
+                                            }
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    <p class="mt-2 text-success">@Model.Email.FromEmail</p>
+                                }
+                            }
+                        </div>
+                    </div>
+                    <div class="form-group row mb-0">
+                        <label for="inputEmailCopy" class="col-sm-2 col-form-label" title="Копию письма отправить">Копия</label>
+                        <div class="col-sm-10">
+
+                            @if (Model.ConfirmationConfig != null && Model.ConfirmationConfig.PersonalPerDepartNumbers > 0)
+                            {
+                                if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                {
+                                    <input type="email" style="max-width:100%!important;" class="form-control form-control-sm mb-0" id="inputEmailCopy" placeholder="e-mail (обычно почта отправителя)" value="@ViewBag.SenderEmail">
+                                }
+                                else
+                                {
+                                    <p class="mt-2 text-success">@Model.Email.CopiesEmails</p>
+                                }
+                            }
+                            else
+                            {
+                                if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                {
+                                    <input type="email" style="max-width:100%!important;" class="form-control form-control-sm mb-0" id="inputEmailCopy" placeholder="e-mail (обычно почта отправителя)" value="@ViewBag.SenderEmail">
+                                }
+                                else
+                                {
+                                    <p class="mt-2 text-success">@Model.Email.CopiesEmails</p>
+                                }
+                            }
+
+
+                        </div>
+                    </div>
+
+                    <div class="form-group row mb-1">
+                        <label for="emailsContainer" class="col-sm-2 col-form-label" title="Выберите адреса эл. почты">Кому</label>
+                        <div class="col-sm-10" id="emailsContainer" style="height:7vh!important; ">
+                            <div class="contentScrollH  " style=" ">
+
+                                @if (Model.ConfirmationConfig != null && Model.ConfirmationConfig.PersonalPerDepartNumbers > 0)
+                                {
+                                    if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                    {
+                                        <div class="d-flex text-wrap small">
+                                            @foreach (var item in Model.Recipients)
+                                            {
+                                                <div class="custom-control custom-checkbox mr-4">
+                                                    <input type="checkbox" class="custom-control-input emailSenderClass" @IsCheckedEMail(item.Attr1) value="@item.Attr1" id="@item.Value">
+                                                    <label class="custom-control-label" for="@item.Value">@item.Name</label>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="mt-2 text-success">@Model.Email.ToEmails</p>
+                                    }
+                                }
+                                else
+                                {
+                                    if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                    {
+                                        <div class="d-flex text-wrap small">
+                                            @foreach (var item in Model.Recipients)
+                                            {
+                                                <div class="custom-control custom-checkbox mr-4">
+                                                    <input type="checkbox" class="custom-control-input emailSenderClass" @IsCheckedEMail(item.Attr1) value="@item.Attr1" id="@item.Value">
+                                                    <label class="custom-control-label" for="@item.Value">@item.Name</label>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="mt-2 text-success">@Model.Email.ToEmails</p>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <br />
+                    <div class="form-group row mb-0 mt-1">
+                        <label for="inputEmailSubject" class="col-sm-2 col-form-label">Тема</label>
+                        <div class="col-sm-10">
+                            @if (Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Sent && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Deleted
+                                        && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Canceled)
+                            {
+                                <input value="@Model.Email.Subject" type="text" maxlength="2000" style="max-width:100%!important;" class="form-control form-control-sm mb-0" id="inputEmailSubject" placeholder="Тема письма">
+                            }
+                            else
+                            {
+                                <input readonly value="@Model.Email.Subject" type="text" maxlength="2000" style="max-width:100%!important;" class="form-control form-control-sm mb-0" id="inputEmailSubject" placeholder="Тема письма">
+                            }
+
+                        </div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="form-group row mb-1">
+                        <label class="col-sm-2 col-form-label" title="Ответств. лица по ремонтам">Отправить СМС</label>
+                        <div class="col-sm-10 contentScroll" id="smsPersonalContainer" style="height:8vh!important;">
+                            @if (Model.ConfirmationConfig != null && Model.ConfirmationConfig.PersonalPerDepartNumbers > 0)
+                            {
+                                if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                {
+                                    <div class="d-flex flex-wrap small">
+                                        @foreach (var item in ViewBag.SMSPersonal as List<CallboardPersonalItem>)
+                                        {
+                                            <div class="custom-control custom-checkbox mr-4">
+                                                <input type="checkbox" class="custom-control-input smsSenderClass" @IsCheckedSMSPersonal(item.PersonalID) value="@item.PersonalID" id="p-@item.PersonalID">
+                                                <label class="custom-control-label" for="p-@item.PersonalID">
+                                                    <span title="@item.Phone">@item.PersonalShortName</span>
+                                                    @if (item.IsShift)
+                                                    {
+                                                        <span class="text-warning">(В смене)</span>
+                                                    }
+                                                </label>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap small">
+                                        @foreach (var item in Model.Email.SMSPersonalShortNames)
+                                        {
+                                            <label class="mr-4">
+                                                <span>@item</span>
+                                            </label>
+                                        }
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                {
+                                    <div class="d-flex flex-wrap small">
+                                        @foreach (var item in ViewBag.SMSPersonal as List<CallboardPersonalItem>)
+                                        {
+                                            <div class="custom-control custom-checkbox mr-4">
+                                                <input type="checkbox" class="custom-control-input smsSenderClass" @IsCheckedSMSPersonal(item.PersonalID) value="@item.PersonalID" id="p-@item.PersonalID">
+                                                <label class="custom-control-label" for="p-@item.PersonalID">
+                                                    <span title="@item.Phone">@item.PersonalShortName</span>
+                                                    @if (item.IsShift)
+                                                    {
+                                                        <span class="text-warning">(В смене)</span>
+                                                    }
+                                                </label>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-wrap small">
+                                        @foreach (var item in Model.Email.SMSPersonalShortNames)
+                                        {
+                                            <label class="mr-4">
+                                                <span>@item</span>
+                                            </label>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                    <div class="form-group row mt-2">
+                        <label class="col-sm-2 col-form-label">Текст СМС</label>
+                        <div class="col-sm-10">
+
+                            @if (Model.ConfirmationConfig != null && Model.ConfirmationConfig.PersonalPerDepartNumbers > 0)
+                            {
+                                if (Model.Email.IsConfirmed && Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                {
+                                    <textarea rows="3" maxlength="1000" class="form-control form-control-sm mb-0" style="width:100%!important; max-width:100%!important;" id="areaSMSText">@GetSMSText()</textarea>
+                                }
+                                else
+                                {
+                                    <textarea readonly rows="3" maxlength="1000" class="form-control form-control-sm mb-0" style="width:100%!important; max-width:100%!important;">@Model.Email.SMSText</textarea>
+                                }
+                            }
+                            else
+                            {
+                                if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                                {
+                                    <textarea rows="3" maxlength="1000" class="form-control form-control-sm mb-0" style="width:100%!important; max-width:100%!important;" id="areaSMSText">@GetSMSText()</textarea>
+                                }
+                                else
+                                {
+                                    <textarea readonly rows="3" maxlength="1000" class="form-control form-control-sm mb-0" style="width:100%!important; max-width:100%!important;">@Model.Email.SMSText</textarea>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    <hr class="mt-1 mb-2" />
+    <div class="row mt-1">
+        <div class="col-7 border-right">
+            <textarea class="" id="myEditor" name="myEditor" style=""></textarea>
+        </div>
+        <div class="col-5">
+            @if (Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Sent && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Deleted
+                && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Canceled)
+            {
+                <div class="mb-2 pull-right">
+                    <button id="btnCreatePDF" type="button" class="btn btn-sm btn-secondary mt-0 mb-0 mr-2 " data-toggle="tooltip" data-placement="top" title="Создать PDF файл на основании шаблона">
+                        <i class="fa fa-plus mr-1"></i> Документ
+                    </button>
+                    <label for="uploadEditorImageForCard" class="btn btn-sm btn-secondary cursor-hand mt-0 mb-0 " data-toggle="tooltip" data-placement="top" title="Загрузить файл">
+                        <i class="fa fa-upload mr-1 cursor-hand" aria-hidden="true"></i> Загрузить
+                        <input style=" display:none;" type="file" name="uploadEditorImageForCard"
+                               id="uploadEditorImageForCard" accept="image/*" onchange="UploadFile()">
+                    </label>
+                </div>
+            }
+            <div class="contentScrollH horizontal-images border-top pt-2" style="background-color:transparent; height:15vh!important; width:40vw!important; overflow-y:hidden!important;">
+                <div id="filesContainer" style="">
+                    @Html.Partial("_EmailFilesPartialView", @Model.Email)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-2 border-top pt-2">
+    <div class="col-7 border-right">
+        @if (Model.ConfirmationConfig != null && @Model.ConfirmationConfig.PersonalPerDepartNumbers > 0)
+        {
+            <div class="d-flex bd-highlight w-100">
+                <div class="flex-grow-1">
+                    <p class="small">Имеется <span class="badge border text-primary">@Model.Email.EmailConfirmations.Count</span> из <span class="badge border text-success">@Model.ConfirmationConfig.PersonalPerDepartNumbers</span> подписей для согласования письма. </p>
+                </div>
+                <div class="">
+                    @if (Model.Email.IsConfirmed && Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                    {
+                        <button id="btnResetConfirms" type="button" class="btn btn-sm btn-outline-danger" data-toggle="tooltip" data-placement="top" title="Сбросить все согласования для этого письма.">
+                            <i class="fa fa-remove"></i> Сбросить
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="contentScroll mt-1" style="height:30vh!important;">
+                <table class="table table-sm">
+                    <thead class="thead-light">
+                        <tr>
+                            <th width="30%">Подразделение</th>
+                            <th width="30%">Должность</th>
+                            <th width="30%">Согласовал, ФИО</th>
+                            <th width="10%">Дата</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.ConfirmationConfig.ConfirmationConfigDeparts.Any())
+                        {
+                            foreach (var depart in Model.ConfirmationConfig.ConfirmationConfigDeparts.OrderBy(x => x.SortOrder))
+                            {
+                                <tr>
+                                    <td>
+                                        @depart.DepartmentName
+                                    </td>
+                                    <td colspan="3">
+                                        <table class="table table-sm border-0 m-0 p-0">
+                                            @if (depart.ConfirmationConfigDepartPersonals.Any())
+                                            {
+                                                <tbody>
+                                                    @foreach (var personal in depart.ConfirmationConfigDepartPersonals)
+                                                    {
+                                                        <tr class="border-0">
+                                                            <td class="border-0" width="42%">
+                                                                @personal.PersonalPosition
+                                                            </td>
+                                                            <td class="border-0" width="43%">
+                                                                @if (Model.PersonalID == personal.PersonalID)
+                                                                {
+                                                                    if (Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Sent && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Deleted
+                                                                        && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Canceled)
+                                                                    {
+                                                                        <div class="custom-control custom-checkbox mr-sm-2">
+                                                                            <input @GetConfirmPersonalState(IsConfirmPersonal(personal.PersonalID, depart.DepartmentID)) value="@personal.PersonalID"
+                                                                                   data-departmentid="@depart.DepartmentID"
+                                                                                   type="checkbox" class="custom-control-input confirmPersonalClass"
+                                                                                   id="personal-@personal.PersonalID-@depart.DepartmentID">
+                                                                            <label class="custom-control-label  pt-0" for="personal-@personal.PersonalID-@depart.DepartmentID">@personal.PersonalFullName</label>
+                                                                        </div>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <div class="custom-control custom-checkbox mr-sm-2">
+                                                                            <input @GetConfirmPersonalState(IsConfirmPersonal(personal.PersonalID, depart.DepartmentID)) value="@personal.PersonalID"
+                                                                                   data-departmentid="@depart.DepartmentID" disabled
+                                                                                   type="checkbox" class="custom-control-input"
+                                                                                   id="personal-@personal.PersonalID-@depart.DepartmentID">
+                                                                            <label class="custom-control-label pt-0" for="personal-@personal.PersonalID-@depart.DepartmentID">@personal.PersonalFullName</label>
+                                                                        </div>
+                                                                    }
+
+                                                                }
+                                                                else
+                                                                {
+                                                                    <div class="custom-control custom-checkbox mr-sm-2">
+                                                                        <input @GetConfirmPersonalState(IsConfirmPersonal(personal.PersonalID, depart.DepartmentID)) disabled type="checkbox"
+                                                                               class="custom-control-input" id="personal-@personal.PersonalID-@depart.DepartmentID">
+                                                                        <label class="custom-control-label  pt-0" for="personal-@personal.PersonalID-@depart.DepartmentID">@personal.PersonalFullName</label>
+                                                                    </div>
+                                                                }
+                                                            </td>
+                                                            <td class="border-0" width="15%">
+                                                                @GetConfirmPersonalTime(personal.PersonalID, depart.DepartmentID)
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            }
+                                        </table>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="col-5">
+        <div>
+            @if (Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Sent && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Deleted
+            && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Canceled)
+            {
+                <div class="input-group mb-3" style="width:100%!important;">
+                    <input style="max-width:100%!important;" maxlength="1000" id="inpNote" type="text" class="form-control form-control-sm" placeholder="Сообщение (не более 1000 символов)" aria-label="Сообщение" aria-describedby="btnAddMsg">
+                    <div class="input-group-append">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="TableFilter">
+                            <button class="btn btn-outline-secondary" type="button" data-toggle="tooltip" data-placement="top" title="Добавить сообщение в Обсуждение письма" id="btnAddMsg">Добавить</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="event.stopPropagation; GetComments();" data-toggle="tooltip" data-placement="top" title="Обновить лист обсуждений">Обновить</button>
+                        </div>
+
+                    </div>
+                </div>
+            }
+            <div class="contentScroll" style="height:31vh!important; overflow-y:auto; overflow-x:hidden;">
+                <div id="noteContainer">
+                    @Html.Partial("_EmailCommentsPartialView", @Model.Email)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<nav class="navbar fixed-bottom  navbar-expand-lg navbar-light bg-light  border-top  border-secondary">
+    <button class="navbar-toggler navbar-toggler-right" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+        <ul class="navbar-nav mr-auto ">
+            <li class="nav-item active mr-1">
+                <a href="@ViewBag.PreviousUrl" class="nav-link border border-secondary bottomMenuItem" data-toggle="tooltip" data-placement="top" title="Назад"><i class="fa fa-angle-left"></i> Назад</a>
+            </li>
+        </ul>
+        <ul class="navbar-nav ml-auto">
+            <li class="nav-item mr-1">
+                <a class="nav-link border border-secondary bottomMenuItem" href='@Url.Content("~/Email/Index")' data-toggle="tooltip" data-placement="top" title="Реестр писем">
+                    Письма
+                </a>
+            </li>
+            <li class="nav-item mr-1">
+                <a class="nav-link border border-secondary bottomMenuItem" href='@Url.Content("~/SupportCalls/Index")' data-toggle="tooltip" data-placement="top" title="Заявки на вызов сторонних организаций">
+                    Заявки на вызов
+                </a>
+            </li>
+            @if (Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Sent)
+            {
+                if (Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Canceled &&
+                    Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Deleted &&
+                    Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Error)
+                {
+                    <li class="nav-item mr-1">
+                        <a id="btnCancelEmail" href="#" class="nav-link border border-danger bottomMenuItem"
+                           data-toggle="tooltip" data-placement="top" title="Отменить письмо">Отменить</a>
+                    </li>
+                }
+                if (((BaseController)this.ViewContext.Controller).IsVisibleItemCache(null, "Email", "DeleteEmail"))
+                {
+                    <li class="nav-item mr-1">
+                        <a id="btnDeleteEmail" href="#" class="nav-link border border-danger bottomMenuItem"
+                           data-toggle="tooltip" data-placement="top" title="Удалить письмо"><i class="fa fa-remove"></i> Удалить</a>
+                    </li>
+                }
+            }
+            @if (Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Sent && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Deleted
+                && Model.Email.LastEmailState.EmailStateTypeID != (int)EmailStateTypeEnums.Canceled)
+            {
+                <li class="nav-item mr-1">
+                    <a id="btnSaveEmail" href="#" class="nav-link border border-danger bottomMenuItem"
+                       data-toggle="tooltip" data-placement="top" title="Сохранить письмо (тема и сообщение)"><i class="fa fa-save"></i> Сохранить</a>
+                </li>
+            }
+            @if (Model.ConfirmationConfig != null && @Model.ConfirmationConfig.PersonalPerDepartNumbers > 0)
+            {
+                if (Model.Email.IsConfirmed && Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                {
+                    <li class="nav-item mr-1">
+                        <a id="btnSendEmail" href="#" class="nav-link border border-danger bottomMenuItem"
+                           data-toggle="tooltip" data-placement="top" title="Отправить письмо"><i class="fa fa-send"></i> Отправить</a>
+                    </li>
+                }
+            }
+            else
+            {
+                if (Model.Email.LastEmailState.EmailStateTypeID == (int)EmailStateTypeEnums.PendingToSend)
+                {
+                    <li class="nav-item mr-1">
+                        <a id="btnSendEmail" href="#" class="nav-link border border-danger bottomMenuItem"
+                           data-toggle="tooltip" data-placement="top" title="Отправить письмо"><i class="fa fa-send"></i> Отправить</a>
+                    </li>
+                }
+            }
+
+
+        </ul>
+    </div>
+</nav>
+
+<!-- Error Modal -->
+<div class="modal fade" id="msgModal" tabindex="-1" role="dialog" aria-labelledby="msgModal" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Внимание!</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="msgModalBody">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary " data-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Message Modal -->
+<div class="modal fade" id="msgModalDeleteMsg" tabindex="-1" role="dialog" aria-labelledby="msgModalDeleteMsg" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Удаление письма</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="msgModalBody">
+                <p class="text-danger text-danger">Вы уверены, что хотите <strong>УДАЛИТЬ</strong> письмо?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="btnDeleteMsgConfirmed" type="button" class="btn btn-danger w-50" style="">Да</button>
+                <button type="button" class="btn btn-secondary w-50" data-dismiss="modal" style="">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cancel Message Modal -->
+<div class="modal fade" id="msgModalCancelMsg" tabindex="-1" role="dialog" aria-labelledby="msgModalCancelMsg" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Отмена письма</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="msgModalBody">
+                <p class="text-danger text-danger">Вы уверены, что хотите <strong>ОТМЕНИТЬ</strong> письмо?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="btnCancelMsgConfirmed" type="button" class="btn btn-danger mr-auto w-25" style="">Да</button>
+                <button type="button" class="btn btn-secondary w-25" data-dismiss="modal" style="">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete File Modal -->
+<div class="modal fade" id="msgModalDeleteFile" tabindex="-1" role="dialog" aria-labelledby="msgModalDeleteFile" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Удаление файла</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="msgModalBody">
+                <p class="text-danger text-danger">Вы уверены, что хотите <strong>УДАЛИТЬ</strong> файл?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="btnDeleteFileConfirmed" type="button" class="btn btn-danger" style="width:100%!important;">Да</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal" style="width:100%!important;">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Email Modal -->
+<div class="modal fade" id="msgModalDeleteEmail" tabindex="-1" role="dialog" aria-labelledby="msgModalDeleteEmail" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Удаление письма</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="msgModalBody">
+                <p class="text-danger text-danger">Вы уверены, что хотите <strong>УДАЛИТЬ</strong> письмо?</p>
+                <small>Внимание! Удаление письма приведет к удаленю связанных с ним файлов.</small>
+            </div>
+            <div class="modal-footer">
+                <button id="btnDeleteEmailConfirmed" type="button" class="btn btn-danger w-25">Да</button>
+                <button type="button" class="btn btn-secondary w-50" data-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Send Email Modal -->
+<div class="modal fade" id="msgModalSendEmail" tabindex="-1" role="dialog" aria-labelledby="msgModalSendEmail" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Отправка письма</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="msgModalBody">
+                <p class="text-danger text-danger">Вы уверены, что хотите <strong>ОТПРАВИТЬ</strong> письмо?</p>
+                <small>Внимание! Отправка письма может занять некоторое время. Не закрывайте страницу пока не получите сообщение об успешной отправке!</small>
+            </div>
+            <div class="modal-footer">
+                <button id="btnSendEmailConfirmed" type="button" class="btn btn-danger w-25">Да</button>
+                <button type="button" class="btn btn-secondary w-50" data-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset confims  Modal -->
+<div class="modal fade" id="msgModalResetConfirms" tabindex="-1" role="dialog" aria-labelledby="msgModalResetConfirms" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Отмена согласований</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="msgModalBody">
+                <p class="text-danger text-danger">Вы уверены, что хотите <strong>ОТМЕНИТЬ</strong> все согласования?</p>
+                <small>Внимание! Отмена согласований требует повторного согласования!</small>
+            </div>
+            <div class="modal-footer">
+                <button id="btnResetConfirmsConfirmed" type="button" class="btn btn-danger w-25">Да</button>
+                <button type="button" class="btn btn-secondary w-25" data-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @Scripts.Render("~/bundles/jqueryval")
+    <script src="~/Scripts/tinymce/tinymce.min.js"></script>
+    <script src="~/Scripts/viewer-master/dist/viewer.js"></script>
+    <script type="text/javascript">
+        var isEditable = ('@Model.Email.IsEditable.ToString().ToLower()' === 'true');
+
+        function Init() {
+            tinymce.init({
+                language: 'ru',
+                directionality: 'rtl',
+                selector: '#myEditor',
+                mode: "specific_textareas",
+                editor_selector: "myEditor",
+                menu: {
+                    tc: {
+                        title: 'TinyComments',
+                        items: 'addcomment showcomments deleteallconversations'
+                    }
+                },
+                // autoresize_bottom_margin: 10,
+                plugins: 'fullscreen autoresize   print preview fullpage importcss searchreplace autolink autosave directionality visualblocks visualchars  link       table charmap hr pagebreak nonbreaking anchor toc insertdatetime advlist lists wordcount textpattern noneditable help charmap emoticons',
+                toolbar: 'fullscreen | undo redo | formatselect | bold italic backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | removeformat | help',
+                content_css: [
+                    '//fonts.googleapis.com/css?family=Lato:300,300i,400,400i',
+                    '//www.tiny.cloud/css/codepen.min.css'
+                ],
+                toolbar: 'fullscreen | undo redo | bold italic underline strikethrough | fontselect fontsizeselect formatselect | alignleft aligncenter alignright alignjustify | outdent indent |  numlist bullist | forecolor backcolor removeformat | pagebreak | charmap emoticons | preview   print | template link anchor codesample | ltr rtl | showcomments addcomment',
+                image_advtab: true,
+                content_css: [
+                    '//fonts.googleapis.com/css?family=Lato:300,300i,400,400i',
+                    '//www.tiny.cloud/css/codepen.min.css'
+                ],
+                importcss_append: true,
+                max_height: 180,
+                min_height: 180,
+                quickbars_selection_toolbar: 'bold italic | quicklink h2 h3 blockquote   quicktable',
+                noneditable_noneditable_class: "mceNonEditable",
+                toolbar_drawer: 'sliding',
+                contextmenu: false,
+                setup: function(editor) {
+                editor.on('init', function(e) {
+                    tinyMCE.activeEditor.setContent('<!DOCTYPE html><html><head></head><body>' + '@Html.Raw(Model.Email.Body)'  + '</body></html>');
+                });
+              }
+            });
+        }
+
+        Init();
+
+        function IsEmail(email) {
+              var regex = /^([a-zA-Z0-9_\.\-\+])+\@@(([a-zA-Z0-9\-])+\.)+([a-zA-Z0-9]{2,4})+$/;
+              if(!regex.test(email)) {
+                    return false;
+              }else{
+                    return true;
+              }
+        }
+
+        $(function () {
+            ConfigEvents();
+
+            $('#btnResetConfirms').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                 $('#msgModalResetConfirms').modal('toggle');
+            });
+
+            $('#btnResetConfirmsConfirmed').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $('#msgModalResetConfirms').modal('toggle');
+
+                var params = { emailID: '@Model.Email.ID' };
+                    $.ajax({
+                       type: "POST",
+                       url: '@Url.Action("ResetConfirms", "Email")',
+                       contentType: "application/json; charset=utf-8",
+                       dataType: "json",
+                       data: JSON.stringify(params),
+                       success: function (data) {
+                           if (data.success === true) {
+                                 window.location.reload();
+                           }
+                           else {
+                               console.log("Ошибка");
+                               $('#msgModalBody').html(data.msg);
+                               $('#msgModal').modal({ keyboard: false });
+                           }
+                       }
+                    }).done(function() {
+                          
+                    });
+
+            });
+
+            $('#btnCreatePDF').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                window.location = '@Url.Content(Html.Encode(string.Format("~/Email/CreateDocument/{0}?emailID={1}", Model.Email.SCEmail.SupportCallID, Model.Email.ID)))';
+            });
+
+
+            $('#btnDeleteMsgConfirmed').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                $('#msgModalDeleteMsg').modal('toggle');
+                var params = { id: $(this).data('id') };
+                    $.ajax({
+                       type: "DELETE",
+                       url: '@Url.Action("RemoveComment", "Email")',
+                       contentType: "application/json; charset=utf-8",
+                       dataType: "json",
+                       data: JSON.stringify(params),
+                       success: function (data) {
+                           if (data.success === true) {
+                           }
+                           else {
+                               console.log("Ошибка");
+                               $('#msgModalBody').html(data.msg);
+                               $('#msgModal').modal({ keyboard: false });
+                           }
+                       }
+                    }).done(function() {
+                        GetComments();
+                    });
+            });
+
+            $('#btnCancelEmail').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $('#msgModalCancelMsg').modal('toggle');
+            });
+
+            $('#btnCancelMsgConfirmed').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                $('#msgModalCancelMsg').modal('toggle');
+                var params = { emailID: '@Model.Email.ID' };
+                $.ajax({
+                       type: "POST",
+                       url: '@Url.Action("CancelEmail", "Email")',
+                       contentType: "application/json; charset=utf-8",
+                       dataType: "json",
+                       data: JSON.stringify(params),
+                       success: function (data) {
+                           if (data.success === true) {
+                               window.location = '@Url.Content("~/Email/Index")';
+                           }
+                           else {
+                               console.log("Ошибка");
+                               $('#msgModalBody').html(data.msg);
+                               $('#msgModal').modal({ keyboard: false });
+                           }
+                       }
+                    }).done(function() {
+                    });
+            });
+
+            if ($('#selectSender option:selected')) {
+                console.log('Почта отправителя имеется');
+                $('#inputEmailCopy').val($('#selectSender option:selected').data('email'));
+                $('#selectSender').on('change', function () {
+                    $('#inputEmailCopy').val($(this).find(":selected").data('email'));
+                });
+            }
+
+            $('.confirmPersonalClass').change(function (e) {
+                var isSign = $(this).is(':checked');
+                // console.log(isSign);
+                var personalId = $(this).prop('value');
+                // console.log(personalId);
+                var departmentid = $(this).data('departmentid');
+                // console.log(personalId);
+                var params = { emailID: '@Model.Email.ID', personalID: @Model.PersonalID, isSign: isSign, signsByRules: @Model.ConfirmationConfig.PersonalPerDepartNumbers, departmentID: departmentid  };
+                //console.log(params);
+
+                $.ajax({
+                   type: "POST",
+                   url: '@Url.Action("SetConfirmation", "Email")',
+                   contentType: "application/json; charset=utf-8",
+                   dataType: "json",
+                   data: JSON.stringify(params),
+                   success: function (data) {
+                       $("#loading").hide();
+                       if (data.success === true) {
+                           window.location.reload();
+                       }
+                       else {
+                           console.log("Ошибка");
+                           $('#msgModalBody').html(data.msg);
+                           $('#msgModal').modal({ keyboard: false });
+                       }
+                   }
+                });
+            });
+
+            $('#btnAddMsg').click(function (e) {
+                e.stopPropagation();
+                e.preventDefault();
+                var message = $('#inpNote').val();
+
+                if (message) {
+                    $('#inpNote').val('');
+                    var params = { emailID: '@Model.Email.ID', note: message };
+                    $.ajax({
+                       type: "PUT",
+                       url: '@Url.Action("AddComment", "Email")',
+                       contentType: "application/json; charset=utf-8",
+                       dataType: "json",
+                       data: JSON.stringify(params),
+                       success: function (data) {
+                           if (data.success === true) {
+
+                           }
+                           else {
+                               console.log("Ошибка");
+                               $('#msgModalBody').html(data.msg);
+                               $('#msgModal').modal({ keyboard: false });
+                           }
+
+                             $(".contentScroll").mCustomScrollbar({
+                                    axis: "y",
+                                    advanced: { autoExpandHorizontalScroll: true },
+                                    theme:"inset-2-dark"
+                                });
+                       }
+                    }).done(function () {
+                        GetComments();
+                    });
+                }
+            });
+
+            $('#btnDeleteFileConfirmed').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                $('#msgModalDeleteFile').modal('toggle');
+
+                var params = { emailFileID: $(this).data('id') };
+                    $.ajax({
+                       type: "DELETE",
+                       url: '@Url.Action("DeleteFile", "Email")',
+                       contentType: "application/json; charset=utf-8",
+                       dataType: "json",
+                       data: JSON.stringify(params),
+                       success: function (data) {
+                           if (data.success === true) {
+                           }
+                           else {
+                               console.log("Ошибка");
+                               $('#msgModalBody').html(data.msg);
+                               $('#msgModal').modal({ keyboard: false });
+                           }
+                       }
+                    }).done(function() {
+                        GetEmailFiles();
+                    });
+            });
+
+            $('#btnDeleteEmail').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                $('#msgModalDeleteEmail').modal('toggle');
+            });
+
+            $('#btnDeleteEmailConfirmed').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                $('#msgModalDeleteEmail').modal('toggle');
+
+                var params = { emailID: '@Model.Email.ID' };
+                    $.ajax({
+                       type: "DELETE",
+                       url: '@Url.Action("DeleteEmail", "Email")',
+                       contentType: "application/json; charset=utf-8",
+                       dataType: "json",
+                       data: JSON.stringify(params),
+                       success: function (data) {
+                           if (data.success === true) {
+                           }
+                           else {
+                               console.log("Ошибка");
+                               $('#msgModalBody').html(data.msg);
+                               $('#msgModal').modal({ keyboard: false });
+                           }
+                       }
+                    }).done(function() {
+                        window.location = '@Url.Content("~/Email/Index")';
+                    });
+            });
+
+            $('#btnSendEmail').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                $('#msgModalSendEmail').modal('toggle');
+            });
+
+            $('#btnSaveEmail').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                SaveEmail();
+            });
+
+            $('#btnSendEmailConfirmed').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                SendEmail();
+            });
+
+
+        });
+
+
+
+        function remove_linebreaks(message) {
+            return message.replace( /[\r\n]+/gm, "" );
+        }
+
+        function SendEmail() {
+             console.log('SaveEmail');
+            var editorContent = tinyMCE.get('myEditor').getContent();
+            if (editorContent.length == 0) {
+               $('#msgModalBody').html('Письмо пустое. Напишите письмо!');
+               $('#msgModal').modal({ keyboard: false });
+               return false;
+            }
+            var body=remove_linebreaks(editorContent.replace(/^.*?<body>(.*?)<\/body>.*?$/s,"$1"));
+
+            var emailSubjectVal = $('#inputEmailSubject').val();
+            if (emailSubjectVal.length == 0) {
+                    $('#msgModalBody').html('Укажите тему письма.');
+                    $('#msgModal').modal({ keyboard: false });
+                    return false;
+            }
+
+            //      List<int> smsPersonal, string smsText, Guid senderID
+
+             var selectedEmails = $('.emailSenderClass:checkbox:checked').map(function() {
+                    return this.value;
+                }).get();
+                // console.log(selectedEmails);
+                if (selectedEmails.length == 0) {
+                     $('#msgModalSendEmail').modal('toggle');
+                     $('#msgModalBody').html('Укажите получателей письма.');
+                     $('#msgModal').modal({ keyboard: false });
+                    return false;
+            }
+
+             var emailCopyVal = $('#inputEmailCopy').val();
+                if (emailCopyVal) {
+                    if (IsEmail(emailCopyVal) === false) {
+                       $('#msgModalSendEmail').modal('toggle');
+                        emailCopyVal = '';
+                        $('#msgModalBody').html('Формат e-mail для копии письма неправильный.');
+                        $('#msgModal').modal({ keyboard: false });
+                        return false;
+                    }
+                }
+                else {
+                    emailCopyVal = '';
+            }
+
+            var selectedSMS = $('.smsSenderClass:checkbox:checked').map(function() {
+                    return this.value;
+                }).get();
+            // console.log(selectedSMS);
+
+            var sender = $('#selectSender option:selected').val();
+            if (!sender) {
+                    $('#msgModalBody').html('Не указан отправитель письма! Выберите отправителя письма!');
+                    $('#msgModal').modal({ keyboard: false });
+                    return false;
+            }
+
+            var params = { id: '@Model.Email.ID', subject: emailSubjectVal, body: body, emails: selectedEmails, emailCopy: emailCopyVal,
+                                smsPersonal: selectedSMS, smsText: $('#areaSMSText').val(), senderID: sender };
+
+            $('#msgModalSendEmail').modal('toggle');
+
+            $.ajax({
+                url: '@Url.Action("SaveAndSendEmail", "Email")', data: JSON.stringify(params),
+                method: 'POST',
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (data) {
+                    //console.log(data);
+                    if (data.success === true) {
+                        $('#msgModalBody').html('Письмо <strong>УСПЕШНО</strong> отправлено!');
+                        $('#msgModal').modal({ keyboard: false });
+
+                         setTimeout( function() { window.location = '@Url.Content("~/Email/Index")' ; }, 2000);
+                    }
+                    else {
+                        $('#msgModalBody').html(data.msg);
+                        $('#msgModal').modal({ keyboard: false });
+                    }
+                }}).fail(function () {
+                     console.log('Error');
+                });
+        }
+
+        function SaveEmail() {
+            console.log('SaveEmail');
+            var editorContent = tinyMCE.get('myEditor').getContent();
+            if (editorContent.length == 0) {
+               $('#msgModalBody').html('Письмо пустое. Напишите письмо!');
+               $('#msgModal').modal({ keyboard: false });
+               return false;
+            }
+            var body=remove_linebreaks(editorContent.replace(/^.*?<body>(.*?)<\/body>.*?$/s,"$1"));
+
+            var emailSubjectVal = $('#inputEmailSubject').val();
+            if (emailSubjectVal.length == 0) {
+                     $('#msgModalBody').html('Укажите тему письма.');
+                     $('#msgModal').modal({ keyboard: false });
+                    return false;
+            }
+
+            var selectedEmails = $('.emailSenderClass:checkbox:checked').map(function() {
+                                    return this.value;
+                                }).get();
+
+            var emailCopyVal = $('#inputEmailCopy').val();
+
+            var selectedSMS = $('.smsSenderClass:checkbox:checked').map(function() {
+                    return this.value;
+                }).get();
+            // console.log(selectedSMS);
+
+            var sender = $('#selectSender option:selected').val();
+
+            var params = { id: '@Model.Email.ID', subject: emailSubjectVal, body: body, emails: selectedEmails, emailCopy: emailCopyVal,
+                                smsPersonal: selectedSMS, smsText: $('#areaSMSText').val(), senderID: sender };
+
+            $.ajax({
+                url: '@Url.Action("SaveEmail", "Email")', data: JSON.stringify(params),
+                method: 'POST',
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (data) {
+                    //console.log(data);
+                    if (data.success === true) {
+                        $('#msgModalBody').html('Письмо <strong>УСПЕШНО</strong> сохранено!');
+                        $('#msgModal').modal({ keyboard: false });
+
+                        setTimeout( function() { window.location.reload(true); }, 2000);
+                    }
+                    else {
+                        $('#msgModalBody').html(data.msg);
+                        $('#msgModal').modal({ keyboard: false });
+                    }
+                }}).fail(function () {
+                     console.log('Error');
+                });
+        }
+
+        function UploadFile() {
+            console.log('UploadFile');
+            event.stopPropagation();
+            var file = document.querySelector('#uploadEditorImageForCard').files[0];
+            console.log(file);
+            var val = file.name.toLowerCase();
+            var regex = new RegExp("(.*?)\.(docx|doc|pdf|xml|bmp|ppt|xls|jpg|jpeg|gif|png|zip|rar|7z|txt)$");
+
+            if (!(regex.test(val))) {
+                document.querySelector('#uploadEditorImageForCard').value = '';
+                $('#msgModalBody').html('Формат файла неверный. Выберите из списка docx|doc|pdf|xml|bmp|ppt|xls|jpg|jpeg|gif|png|zip|rar|7z|txt ');
+                $('#msgModal').modal({ keyboard: false });
+                return false;
+            }
+
+            cardreader = new FileReader();
+            cardreader.onloadend = function () {
+                var data = cardreader.result
+                $.ajax({
+                    url: '@Url.Action("UploadFile", "Email")', data: { emailID: '@Model.Email.ID', fileObject: data, filename: file.name }, method: 'PUT',
+                    success: function (data) {
+                    //console.log(data);
+                        if (data.success === true) {
+                            document.getElementById('uploadEditorImageForCard').value = "";
+                            $('#uploadEditorImageForCard').val('');
+                            GetEmailFiles();
+                    }
+                    else {
+                        $('#msgModalBody').html(data.msg);
+                        $('#msgModal').modal({ keyboard: false });
+                    }
+                }}).fail(function () {
+                     console.log('Error');
+                });
+            };
+            cardreader.readAsDataURL(file);
+        }
+
+        function GetEmailFiles() {
+             console.log('GetEmailFiles');
+             $.getJSON('@Url.Action("GetAllEmailFiles", "Email")', { emailID: '@Model.Email.ID' },
+             function (data) {
+                    if (data.success === true) {
+                        $('#filesContainer').html(data.html);
+                    }
+                })
+                .done(function () {
+                    ConfigEvents();
+                    SetMyContentScroll();
+                })
+                .fail(function () {
+                })
+                .always(function () {
+             });
+        }
+
+        function ConfigEvents() {
+
+              $('.deleteFileClass').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $('#btnDeleteFileConfirmed').data('id', $(this).data('id'));
+                $('#msgModalDeleteFile').modal('toggle');
+            });
+
+
+             $('.removeMessageClass').click(function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $('#btnDeleteMsgConfirmed').data('id',  $(this).data('id'));
+                $('#msgModalDeleteMsg').modal('toggle');
+             });
+
+            $(".contentScrollH").mCustomScrollbar({
+                axis: "x", // horizontal scrollbar
+                advanced: { autoExpandHorizontalScroll: true },
+                theme:"inset-2-dark"
+            });
+
+            $(".contentScroll").mCustomScrollbar({
+                axis: "y", // horizontal scrollbar
+                advanced: { autoExpandHorizontalScroll: true },
+                theme:"inset-2-dark"
+            });
+        }
+
+        function GetComments() {
+            $.getJSON('@Url.Action("GetComments", "Email")', { emailID: '@Model.Email.ID' },
+              function (data) {
+                if (data.success === true) {
+                        $('#noteContainer').html(data.html);
+                }
+                })
+                .done(function () {
+                   ConfigEvents();
+                })
+                .fail(function () {
+                })
+                .always(function () {
+
+              });
+        }
+
+
+    </script>
+}
+
+@section head{
+    <link href="~/Scripts/viewer-master/dist/viewer.css" rel="stylesheet" />
+    <style type="text/css">
+        .list-group-item:hover {
+            background-color: #d8d5d5 !important;
+        }
+
+        th {
+            vertical-align: top !important;
+            text-align: left !important;
+            font-size: 10pt !important;
+        }
+
+        td {
+            vertical-align: middle !important;
+            font-size: 10pt !important;
+        }
+
+            td a {
+                font-size: 10pt !important;
+            }
+
+        table {
+            font-size: small;
+        }
+    </style>
+}
